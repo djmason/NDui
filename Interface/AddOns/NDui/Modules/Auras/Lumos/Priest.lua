@@ -31,10 +31,15 @@ function A:ChantLumos(self)
 		UpdateBuff(self.lumos[4], 64901, 64901, true, true)
 		UpdateCooldown(self.lumos[5], 47788, true)
 	elseif spec == 3 then
-		UpdateDebuff(self.lumos[1], 589, 589)
-		UpdateDebuff(self.lumos[2], 34914, 34914)
-		UpdateCooldown(self.lumos[3], 8092, true)
-		UpdateBuff(self.lumos[4], 228260, 194249, true)
-		UpdateBuff(self.lumos[5], 47585, 47585, true, true)
+		local name, _, _, _, _, _, _ = A:GetUnitAura("player", 194249) -- Voidform
+		if not name then
+			UpdateCooldown(self.lumos[1], 228260, 228260) -- Void Eruption
+		else
+			UpdateCooldown(self.lumos[1], 205448, 205448) -- Void Bolt
+		end
+		UpdateCooldown(self.lumos[2], 8092, true)       -- Mind Blast
+		UpdateDebuff(self.lumos[3], 335467, 335467)     -- Devouring Plague
+		UpdateDebuff(self.lumos[4], 589, 589)           -- Shadow Word: Pain
+		UpdateDebuff(self.lumos[5], 34914, 34914)       -- Vampiric Touch
 	end
 end
