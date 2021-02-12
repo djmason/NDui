@@ -20,7 +20,7 @@ local INTERRUPTED = INTERRUPTED
 -- Init
 function UF:PlateInsideView()
 	if C.db["Nameplate"]["InsideView"] then
-		SetCVar("nameplateOtherTopInset", .08)
+		SetCVar("nameplateOtherTopInset", .05)
 		SetCVar("nameplateOtherBottomInset", .08)
 	else
 		SetCVar("nameplateOtherTopInset", -1)
@@ -143,15 +143,15 @@ function UF:UpdateGroupRoles()
 	B:RegisterEvent("GROUP_LEFT", resetGroupRoles)
 end
 
-function UF:CheckTankStatus(unit)
-	local index = unit.."target"
-	local unitRole = isInGroup and UnitExists(index) and not UnitIsUnit(index, "player") and groupRoles[UnitName(index)] or "NONE"
-	if unitRole == "TANK" and DB.Role == "Tank" then
-		self.feedbackUnit = index
-		self.isOffTank = true
+function UF:CheckThreatStatus(unit)
+	if not UnitExists(unit) then return end
+
+	local unitTarget = unit.."target"
+	local unitRole = isInGroup and UnitExists(unitTarget) and not UnitIsUnit(unitTarget, "player") and groupRoles[UnitName(unitTarget)] or "NONE"
+	if DB.Role == "Tank" and unitRole == "TANK" then
+		return true, UnitThreatSituation(unitTarget, unit)
 	else
-		self.feedbackUnit = "player"
-		self.isOffTank = false
+		return false, UnitThreatSituation("player", unit)
 	end
 end
 
@@ -165,7 +165,7 @@ function UF:UpdateColor(_, unit)
 	local isCustomUnit = customUnits[name] or customUnits[npcID]
 	local isPlayer = self.isPlayer
 	local isFriendly = self.isFriendly
-	local status = self.feedbackUnit and UnitThreatSituation(self.feedbackUnit, unit) or false -- just in case
+	local isOffTank, status = UF:CheckThreatStatus(unit)
 	local customColor = C.db["Nameplate"]["CustomColor"]
 	local secureColor = C.db["Nameplate"]["SecureColor"]
 	local transColor = C.db["Nameplate"]["TransColor"]
@@ -201,7 +201,7 @@ function UF:UpdateColor(_, unit)
 					if DB.Role ~= "Tank" and revertThreat then
 						r, g, b = insecureColor.r, insecureColor.g, insecureColor.b
 					else
-						if self.isOffTank then
+						if isOffTank then
 							r, g, b = offTankColor.r, offTankColor.g, offTankColor.b
 						else
 							r, g, b = secureColor.r, secureColor.g, secureColor.b
@@ -224,18 +224,15 @@ function UF:UpdateColor(_, unit)
 		element:SetStatusBarColor(r, g, b)
 	end
 
-	if isCustomUnit or (not C.db["Nameplate"]["TankMode"] and DB.Role ~= "Tank") then
-		if status and status == 3 then
+	self.ThreatIndicator:Hide()
+	if status and (isCustomUnit or (not C.db["Nameplate"]["TankMode"] and DB.Role ~= "Tank")) then
+		if status == 3 then
 			self.ThreatIndicator:SetBackdropBorderColor(1, 0, 0)
 			self.ThreatIndicator:Show()
-		elseif status and (status == 2 or status == 1) then
+		elseif status == 2 or status == 1 then
 			self.ThreatIndicator:SetBackdropBorderColor(1, 1, 0)
 			self.ThreatIndicator:Show()
-		else
-			self.ThreatIndicator:Hide()
 		end
-	else
-		self.ThreatIndicator:Hide()
 	end
 
 	if executeRatio > 0 and healthPerc <= executeRatio then
@@ -248,7 +245,6 @@ end
 function UF:UpdateThreatColor(_, unit)
 	if unit ~= self.unit then return end
 
-	UF.CheckTankStatus(self, unit)
 	UF.UpdateColor(self, _, unit)
 end
 
@@ -347,8 +343,8 @@ function UF:AddTargetIndicator(self)
 	frame.RightArrow:SetPoint("LEFT", frame, "RIGHT", 3, 0)
 	frame.RightArrow:SetRotation(rad(-90))
 
-	frame.Glow = B.CreateSD(frame, 5, true)
-	frame.Glow:SetOutside(self.Health.backdrop, 5, 5)
+	frame.Glow = B.CreateSD(frame, 8, true)
+	frame.Glow:SetOutside(self.Health.backdrop, 8, 8)
 	frame.Glow:SetBackdropBorderColor(1, 1, 1)
 	frame.Glow:SetFrameLevel(0)
 
@@ -678,6 +674,13 @@ function UF:CreatePlates()
 	self:Tag(title, "[npctitle]")
 	self.npcTitle = title
 
+	local tarName = B.CreateFS(self, C.db["Nameplate"]["NameTextSize"]+4)
+	tarName:ClearAllPoints()
+	tarName:SetPoint("TOP", self, "BOTTOM", 0, -10)
+	tarName:Hide()
+	self:Tag(tarName, "[tarname]")
+	self.tarName = tarName
+
 	UF:CreateHealthText(self)
 	UF:CreateCastBar(self)
 	UF:CreateRaidMark(self)
@@ -758,7 +761,9 @@ function UF:RefreshNameplats()
 		nameplate:SetSize(C.db["Nameplate"]["PlateWidth"], plateHeight)
 		nameplate.nameText:SetFont(DB.Font[1], nameTextSize, DB.Font[3])
 		nameplate.npcTitle:SetFont(DB.Font[1], nameTextSize-1, DB.Font[3])
+		nameplate.tarName:SetFont(DB.Font[1], nameTextSize+4, DB.Font[3])
 		nameplate.Castbar.Icon:SetSize(iconSize, iconSize)
+		nameplate.Castbar.glowFrame:SetSize(iconSize+8, iconSize+8)
 		nameplate.Castbar:SetHeight(plateHeight)
 		nameplate.Castbar.Time:SetFont(DB.Font[1], nameTextSize, DB.Font[3])
 		nameplate.Castbar.Text:SetFont(DB.Font[1], nameTextSize, DB.Font[3])
@@ -808,7 +813,6 @@ function UF:UpdatePlateByType()
 		title:Show()
 
 		raidtarget:SetPoint("TOP", title, "BOTTOM", 0, -5)
-		raidtarget:SetParent(self)
 		classify:Hide()
 		if questIcon then questIcon:SetPoint("LEFT", name, "RIGHT", -1, 0) end
 
@@ -831,8 +835,7 @@ function UF:UpdatePlateByType()
 		hpval:Show()
 		title:Hide()
 
-		raidtarget:SetPoint("RIGHT", self, "LEFT", -3, 0)
-		raidtarget:SetParent(self.Health)
+		raidtarget:SetPoint("BOTTOMRIGHT", self, "TOPLEFT", 0, 3)
 		classify:Show()
 		if questIcon then questIcon:SetPoint("LEFT", self, "RIGHT", -1, 0) end
 
@@ -882,7 +885,7 @@ function UF:PostUpdatePlates(event, unit)
 		self.widgetsOnly = UnitNameplateShowsWidgetsOnly(unit)
 
 		local blizzPlate = self:GetParent().UnitFrame
-		self.widgetContainer = blizzPlate.WidgetContainer
+		self.widgetContainer = blizzPlate and blizzPlate.WidgetContainer
 		if self.widgetContainer then
 			self.widgetContainer:SetParent(self)
 			self.widgetContainer:SetScale(1/NDuiADB["UIScale"])
@@ -903,6 +906,8 @@ function UF:PostUpdatePlates(event, unit)
 		UF.UpdateUnitClassify(self, unit)
 		UF.UpdateDungeonProgress(self, unit)
 		UF:UpdateClassPowerAnchor()
+
+		self.tarName:SetShown(self.npcID == 174773)
 	end
 	UF.UpdateExplosives(self, event, unit)
 end
@@ -1063,4 +1068,25 @@ function UF:ToggleGCDTicker()
 	if not ticker then return end
 
 	ticker:SetShown(C.db["Nameplate"]["PPGCDTicker"])
+end
+
+UF.MajorSpells = {}
+function UF:RefreshMajorSpells()
+	wipe(UF.MajorSpells)
+
+	for spellID in pairs(C.MajorSpells) do
+		local name = GetSpellInfo(spellID)
+		if name then
+			local modValue = NDuiADB["MajorSpells"][spellID]
+			if modValue == nil then
+				UF.MajorSpells[spellID] = true
+			end
+		end
+	end
+
+	for spellID, value in pairs(NDuiADB["MajorSpells"]) do
+		if value then
+			UF.MajorSpells[spellID] = true
+		end
+	end
 end

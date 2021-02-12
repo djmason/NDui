@@ -256,6 +256,7 @@ G.DefaultSettings = {
 		ExecuteRatio = 0,
 		ColoredTarget = false,
 		TargetColor = {r=0, g=.6, b=1},
+		CastbarGlow = true,
 	},
 	Skins = {
 		DBM = true,
@@ -341,6 +342,7 @@ G.DefaultSettings = {
 		NzothVision = true,
 		SendActionCD = false,
 		MawThreatBar = true,
+		MDGuildBest = true,
 	},
 	Tutorial = {
 		Complete = false,
@@ -381,6 +383,8 @@ G.AccountSettings = {
 	Help = {},
 	PartySpells = {},
 	CornerSpells = {},
+	CustomTex = "",
+	MajorSpells = {},
 }
 
 -- Initial settings
@@ -442,10 +446,14 @@ loader:SetScript("OnEvent", function(self, _, addon)
 	InitialSettings(G.DefaultSettings, C.db, true)
 
 	B:SetupUIScale(true)
-	if not G.TextureList[NDuiADB["TexStyle"]] then
-		NDuiADB["TexStyle"] = 2 -- reset value if not exists
+	if NDuiADB["CustomTex"] ~= "" then
+		DB.normTex = "Interface\\"..NDuiADB["CustomTex"]
+	else
+		if not G.TextureList[NDuiADB["TexStyle"]] then
+			NDuiADB["TexStyle"] = 2 -- reset value if not exists
+		end
+		DB.normTex = G.TextureList[NDuiADB["TexStyle"]].texture
 	end
-	DB.normTex = G.TextureList[NDuiADB["TexStyle"]].texture
 
 	self:UnregisterAllEvents()
 end)
@@ -485,6 +493,10 @@ end
 
 local function setupNameplateFilter()
 	G:SetupNameplateFilter(guiPage[5])
+end
+
+local function setupPlateCastbarGlow()
+	G:PlateCastbarGlow(guiPage[5])
 end
 
 local function setupAuraWatch()
@@ -730,17 +742,17 @@ G.TabList = {
 	L["Actionbar"],
 	L["Bags"],
 	L["Unitframes"],
-	NewFeatureTag..L["RaidFrame"],
+	L["RaidFrame"],
 	NewFeatureTag..L["Nameplate"],
-	NewFeatureTag..L["PlayerPlate"],
+	L["PlayerPlate"],
 	L["Auras"],
 	L["Raid Tools"],
 	L["ChatFrame"],
 	L["Maps"],
 	L["Skins"],
 	L["Tooltip"],
-	L["Misc"],
-	L["UI Settings"],
+	NewFeatureTag..L["Misc"],
+	NewFeatureTag..L["UI Settings"],
 	L["Profile"],
 }
 
@@ -764,7 +776,7 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{1, "Actionbar", "Cooldown", HeaderTag..L["Show Cooldown"]},
 		{1, "Actionbar", "OverrideWA", L["HideCooldownOnWA"].."*", true},
 		{1, "Actionbar", "DecimalCD", L["Decimal Cooldown"].."*"},
-		{1, "Misc", "SendActionCD", NewFeatureTag..L["SendActionCD"].."*", true, nil, nil, L["SendActionCDTip"]},
+		{1, "Misc", "SendActionCD", HeaderTag..L["SendActionCD"].."*", true, nil, nil, L["SendActionCDTip"]},
 		{},--blank
 		{1, "Actionbar", "Hotkeys", L["Actionbar Hotkey"].."*", nil, nil, updateHotkeys},
 		{1, "Actionbar", "Macro", L["Actionbar Macro"], true},
@@ -822,18 +834,18 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{1, "UFs", "PartyPetFrame", HeaderTag..L["UFs PartyPetFrame"], true},
 		{1, "UFs", "HorizonParty", L["Horizon PartyFrame"]},
 		{1, "UFs", "PartyAltPower", L["UFs PartyAltPower"], true, nil, nil, L["PartyAltPowerTip"]},
-		{1, "UFs", "PartyWatcher", NewFeatureTag..HeaderTag..L["UFs PartyWatcher"], nil, setupPartyWatcher, nil, L["PartyWatcherTip"]},
+		{1, "UFs", "PartyWatcher", HeaderTag..L["UFs PartyWatcher"], nil, setupPartyWatcher, nil, L["PartyWatcherTip"]},
 		{1, "UFs", "PWOnRight", L["PartyWatcherOnRight"], true},
 		{1, "UFs", "PartyWatcherSync", L["PartyWatcherSync"], nil, nil, nil, L["PartyWatcherSyncTip"]},
 		{},--blank
+		{1, "UFs", "RaidClickSets", HeaderTag..L["Enable ClickSets"], nil, setupClickCast},
+		{1, "UFs", "AutoRes", L["UFs AutoRes"], true},
 		{1, "UFs", "RaidBuffIndicator", HeaderTag..L["RaidBuffIndicator"], nil, setupBuffIndicator, nil, L["RaidBuffIndicatorTip"]},
 		{4, "UFs", "BuffIndicatorType", L["BuffIndicatorType"].."*", nil, {L["BI_Blocks"], L["BI_Icons"], L["BI_Numbers"]}, refreshRaidFrameIcons},
 		{3, "UFs", "BuffIndicatorScale", L["BuffIndicatorScale"].."*", true, {.8, 2, .1}, refreshRaidFrameIcons},
-		{1, "UFs", "RaidClickSets", HeaderTag..L["Enable ClickSets"], nil, setupClickCast},
 		{1, "UFs", "InstanceAuras", HeaderTag..L["Instance Auras"], nil, setupRaidDebuffs, nil, L["InstanceAurasTip"]},
-		{3, "UFs", "RaidDebuffScale", L["RaidDebuffScale"].."*", true, {.8, 2, .1}, refreshRaidFrameIcons},
 		{1, "UFs", "AurasClickThrough", L["RaidAuras ClickThrough"], nil, nil, nil, L["ClickThroughTip"]},
-		{1, "UFs", "AutoRes", L["UFs AutoRes"], true},
+		{3, "UFs", "RaidDebuffScale", L["RaidDebuffScale"].."*", true, {.8, 2, .1}, refreshRaidFrameIcons},
 		{},--blank
 		{1, "UFs", "ShowSolo", L["ShowSolo"], nil, nil, nil, L["ShowSoloTip"]},
 		{1, "UFs", "SpecRaidPos", L["Spec RaidPos"], true, nil, nil, L["SpecRaidPosTip"]},
@@ -866,14 +878,17 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{1, "Nameplate", "ExplosivesScale", L["ExplosivesScale"], true},
 		{1, "Nameplate", "QuestIndicator", L["QuestIndicator"]},
 		{1, "Nameplate", "AKSProgress", L["AngryKeystones Progress"], true},
+		{1, "Nameplate", "CastbarGlow", NewFeatureTag..L["PlateCastbarGlow"].."*", nil, setupPlateCastbarGlow, nil, L["PlateCastbarGlowTip"]},
 		{},--blank
-		{1, "Nameplate", "ColoredTarget", NewFeatureTag..HeaderTag..L["ColoredTarget"].."*", nil, nil, nil, L["ColoredTargetTip"]},
-		{5, "Nameplate", "TargetColor", NewFeatureTag..L["TargetNP Color"].."*"},
+		{1, "Nameplate", "ColoredTarget", HeaderTag..L["ColoredTarget"].."*", nil, nil, nil, L["ColoredTargetTip"]},
+		{5, "Nameplate", "TargetColor", L["TargetNP Color"].."*"},
 		{4, "Nameplate", "TargetIndicator", L["TargetIndicator"].."*", true, {DISABLE, L["TopArrow"], L["RightArrow"], L["TargetGlow"], L["TopNGlow"], L["RightNGlow"]}, refreshNameplates},
+		{},--blank
 		{1, "Nameplate", "CustomUnitColor", HeaderTag..L["CustomUnitColor"].."*", nil, nil, updateCustomUnitList, L["CustomUnitColorTip"]},
 		{5, "Nameplate", "CustomColor", L["Custom Color"].."*", 2},
 		{2, "Nameplate", "UnitList", L["UnitColor List"].."*", nil, nil, updateCustomUnitList, L["CustomUnitTips"]},
 		{2, "Nameplate", "ShowPowerList", L["ShowPowerList"].."*", true, nil, updatePowerUnitList, L["CustomUnitTips"]},
+		{},--blank
 		{1, "Nameplate", "TankMode", HeaderTag..L["Tank Mode"].."*", nil, nil, nil, L["TankModeTip"]},
 		{1, "Nameplate", "DPSRevertThreat", L["DPS Revert Threat"].."*", true, nil, nil, L["RevertThreatTip"]},
 		{5, "Nameplate", "SecureColor", L["Secure Color"].."*"},
@@ -932,7 +947,7 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{1, "Misc", "RaidTool", HeaderTag..L["Raid Manger"]},
 		{1, "Misc", "RMRune", L["Runes Check"].."*"},
 		{1, "Misc", "EasyMarking", L["Easy Mark"].."*", true},
-		{2, "Misc", "DBMCount", L["Countdown Sec"].."*"},
+		{2, "Misc", "DBMCount", L["DBMCount"].."*", nil, nil, nil, L["DBMCountTip"]},
 		{4, "Misc", "ShowMarkerBar", L["ShowMarkerBar"].."*", true, {L["Grids"], L["Horizontal"], L["Vertical"], DISABLE}, updateMarkerGrid},
 		{},--blank
 		{1, "Misc", "QuestNotification", HeaderTag..L["QuestNotification"].."*", nil, nil, updateQuestNotification},
@@ -977,7 +992,7 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{},--blank
 		{1, "Chat", "Invite", HeaderTag..L["Whisper Invite"]},
 		{1, "Chat", "GuildInvite", L["Guild Invite Only"].."*"},
-		{2, "Chat", "Keyword", L["Whisper Keyword"].."*", true, nil, updateWhisperList},
+		{2, "Chat", "Keyword", L["Whisper Keyword"].."*", true, nil, updateWhisperList, L["WhisperKeywordTip"]},
 	},
 	[10] = {
 		{1, "Map", "DisableMap", "|cffff0000"..L["DisableMap"], nil, nil, nil, L["DisableMapTip"]},
@@ -1059,8 +1074,9 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{1, "Misc", "PetFilter", L["Show PetFilter"]},
 		{1, "Misc", "Screenshot", L["Auto ScreenShot"].."*", true, nil, updateScreenShot},
 		{1, "Misc", "Focuser", L["Easy Focus"]},
-		{1, "Misc", "BlockInvite", "|cffff0000"..L["BlockInvite"].."*", true},
-		{1, "Misc", "MawThreatBar", NewFeatureTag..L["MawThreatBar"], nil, nil, nil, L["MawThreatBarTip"]},
+		{1, "Misc", "BlockInvite", "|cffff0000"..L["BlockInvite"].."*", true, nil, nil, L["BlockInviteTip"]},
+		{1, "Misc", "MawThreatBar", L["MawThreatBar"], nil, nil, nil, L["MawThreatBarTip"]},
+		{1, "Misc", "MDGuildBest", NewFeatureTag..L["MDGuildBest"], true, nil, nil, L["MDGuildBestTip"]},
 	},
 	[14] = {
 		{1, "ACCOUNT", "VersionCheck", L["Version Check"]},
@@ -1071,6 +1087,7 @@ G.OptionList = { -- type, key, value, name, horizon, doubleline
 		{},--blank
 		{4, "ACCOUNT", "TexStyle", L["Texture Style"], false, {}},
 		{4, "ACCOUNT", "NumberFormat", L["Numberize"], true, {L["Number Type1"], L["Number Type2"], L["Number Type3"]}},
+		{2, "ACCOUNT", "CustomTex", NewFeatureTag..L["CustomTex"], nil, nil, nil, L["CustomTexTip"]},
 	},
 	[15] = {
 	},
@@ -1182,12 +1199,12 @@ local function CreateOption(i)
 				NDUI_VARIABLE(key, value, eb:GetText())
 				if callback then callback() end
 			end)
+
+			B.CreateFS(eb, 14, name, "system", "CENTER", 0, 25)
 			eb.title = L["Tips"]
 			local tip = L["EditBox Tip"]
 			if tooltip then tip = tooltip.."|n"..tip end
 			B.AddTooltip(eb, "ANCHOR_RIGHT", tip, "info")
-
-			B.CreateFS(eb, 14, name, "system", "CENTER", 0, 25)
 		-- Slider
 		elseif optType == 3 then
 			local min, max, step = unpack(data)
